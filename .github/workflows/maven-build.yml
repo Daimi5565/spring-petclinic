@@ -1,29 +1,102 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
-
-name: Java CI with Maven
-
+name: CI/CD Pipeline
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
-
+    branches:
+      - main
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java: [ '17' ]
-
+  setup:
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK ${{matrix.java}}
-        uses: actions/setup-java@v4
+      - name: Check for Git
+        run: |
+          if ! command -v git &> /dev/null
+          then
+              echo "Git not found, installing..."
+              sudo apt-get update
+              sudo apt-get install -y git
+          else
+              echo "Git is already installed."
+          fi
+      - name: Check for Docker
+        run: |
+          if ! command -v docker &> /dev/null
+          then
+              echo "Docker not found, installing..."
+              sudo apt-get update
+              sudo apt-get install -y \
+                apt-transport-https \
+                ca-certificates \
+                curl \
+                gnupg-agent \
+                software-properties-common && \
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - && \
+                sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" && \
+                sudo apt-get update && \
+                sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+          else
+              echo "Docker is already installed."
+          fi
+      - name: Check for Docker Compose
+        run: |
+          if ! command -v docker-compose &> /dev/null
+          then
+              echo "Docker Compose not found, installing..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+          else
+              echo "Docker Compose is already installed."
+          fi
+      - name: Check for Maven
+        run: |
+          if ! command -v mvn &> /dev/null
+          then
+              echo "Maven not found, installing..."
+              sudo apt-get update
+              sudo apt-get install -y maven
+          else
+              echo "Maven is already installed."
+          fi
+  build:
+    needs: setup
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
         with:
-          java-version: ${{matrix.java}}
-          distribution: 'adopt'
-          cache: maven
-      - name: Build with Maven Wrapper
-        run: ./mvnw -B package
+          java-version: '17'
+          distribution: 'temurin' # Specify the distribution
+      - name: Build with Maven
+        run: mvn clean install
+  test:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin' # Specify the distribution
+      - name: Run Tests with Maven
+        run: mvn test
+  deploy:
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Deploy to server
+        run: |
+          echo "Deploying to server 103.172.26.41:7000"
+          scp -i ${{ secrets.SSH_PRIVATE_KEY }} -r ./target/* Daim@103.172.26.41:/path/to/deploy
+          ssh -i ${{ secrets.SSH_PRIVATE_KEY }} Daim@103.172.26.41 << 'EOF'
+          sudo systemctl restart your-service
+          EOF
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
