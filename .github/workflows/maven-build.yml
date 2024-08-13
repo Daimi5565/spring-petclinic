@@ -66,10 +66,15 @@ jobs:
           DEPLOY_USER: 'daim'
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          scp -i ~/.ssh/id_rsa spring-petclinic/target/spring-petclinic-3.3.0-SNAPSHOT.jar $DEPLOY_USER@$DEPLOY_SERVER:/home/daim/spring-petclinic/
-          ssh -i ~/.ssh/id_rsa $DEPLOY_USER@$DEPLOY_SERVER "nohup java -jar /home/daim/spring-petclinic/spring-petclinic-3.3.0-SNAPSHOT.jar > /dev/null 2>&1 &"
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          scp -i ~/.ssh/id_ed25519 spring-petclinic-3.3.0-SNAPSHOT.jar daim@103.172.26.41:/home/daim/spring-petclinic/
+          
+          ssh -i ~/.ssh/id_ed25519 daim@103.172.26.41 "nohup java -jar /home/daim/spring-petclinic/spring-petclinic-3.3.0-SNAPSHOT.jar > /dev/null 2>&1 &"
+
           for i in {1..30}; do
-            if curl -s http://103.172.26.41:8080 > /dev/null; then
+            if curl -s http://$DEPLOY_SERVER:$DEPLOY_PORT > /dev/null; then
               echo "Application is up!"
               break
             else
