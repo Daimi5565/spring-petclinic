@@ -52,13 +52,13 @@ jobs:
       - name: Run tests
         run: ./mvnw test
 
- deploy:
-  runs-on: self-hosted
-  needs: test
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      working-directory: ./target
+  deploy: 
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Deploy application
         env:
           DEPLOY_SERVER: '103.172.26.41'
@@ -69,10 +69,13 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          scp -i ~/.ssh/id_ed25519 spring-petclinic-3.3.0-SNAPSHOT.jar daim@103.172.26.41:/home/daim/spring-petclinic/
+          # Copy the .jar file to the remote server
+          scp -i ~/.ssh/id_ed25519 target/spring-petclinic-3.3.0-SNAPSHOT.jar daim@103.172.26.41:/home/daim/spring-petclinic/
           
+          # Run the application on the remote server
           ssh -i ~/.ssh/id_ed25519 daim@103.172.26.41 "nohup java -jar /home/daim/spring-petclinic/spring-petclinic-3.3.0-SNAPSHOT.jar > /dev/null 2>&1 &"
 
+          # Check if the application is up and running
           for i in {1..30}; do
             if curl -s http://$DEPLOY_SERVER:$DEPLOY_PORT > /dev/null; then
               echo "Application is up!"
@@ -82,3 +85,4 @@ jobs:
               sleep 10
             fi
           done
+
